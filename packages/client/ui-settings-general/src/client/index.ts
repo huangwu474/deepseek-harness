@@ -1,10 +1,10 @@
 /**
  * Settings shell and ownerless-copy plugin, browser half: renders the
- * `sidebar.settings` occupant — panel chrome, section navigation, and the
- * onboarding stage — and registers everything on the Settings pages that
- * belongs to no single feature: the trigger/header chrome content,
- * local-document action, Account and General sections, and `settings`
- * dictionaries.
+ * `sidebar.settings` occupant — panel chrome, account menu, section
+ * navigation, and the onboarding stage — and registers everything on the
+ * Settings pages that belongs to no single feature: the trigger/header chrome
+ * content, local-document action, Account and General sections, and
+ * `settings` dictionaries.
  * Feature-owned rows and sections stay with their features.
  * Export discipline: packages/client/AGENTS.md.
  */
@@ -17,6 +17,9 @@ import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: pulls ctx.locale into this program.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+// Type-only: supplies the optional theme service's event declaration. The
+// runtime dependency remains optional and is still discovered with ctx.get().
+import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import type {
   SettingsOnboardingStep, SettingsRootInjected, SettingsSectionRow,
 } from './shell-contract.ts'
@@ -42,6 +45,10 @@ export type { SettingsDocumentActionInjected, SettingsDocumentActionProps } from
 export type { SettingsDocumentState } from './settings-document-store.ts'
 export { SettingsDocumentStore } from './settings-document-store.ts'
 export type { SettingsKey } from './locales.ts'
+export type {
+  AccountThemePreference, SettingsOnboardingStep, SettingsRootComponentProps,
+  SettingsRootInjected, SettingsSectionRow,
+} from './shell-contract.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -96,6 +103,14 @@ export function apply(ctx: ClientContext): void {
   let rows: readonly SettingsSectionRow[] = []
   let onboardingVersion = -1
   let onboardingSteps: readonly SettingsOnboardingStep[] = []
+  // Optional: compositions without ui-theme still open Settings; Appearance is
+  // omitted from the account menu. Do not list `theme` in `inject` — apply
+  // benches and minimal profiles must load without it.
+  type ThemeFace = {
+    getTheme: () => { preference: 'light' | 'dark' | 'system' }
+    setTheme: (id: string) => void
+  }
+  const theme = ctx.get('theme', false) as ThemeFace | undefined
   const shellInjected = (): SettingsRootInjected => ({
     hooks: {
       sections: {
@@ -142,10 +157,21 @@ export function apply(ctx: ClientContext): void {
         },
         subscribe: listener => ctx.slots.subscribe('settings.onboarding', listener),
       },
+      themePreference: {
+        getSnapshot: () => theme?.getTheme().preference ?? 'system',
+        subscribe: (listener) => {
+          if (theme === undefined) return () => {}
+          return ctx.on('theme/change', listener)
+        },
+      },
     },
+    ...(theme === undefined
+      ? {}
+      : { setTheme: (preference) => { theme.setTheme(preference) } }),
   })
   ctx.slots.inject('sidebar.settings', () => ctx.slots.register({
     name: 'sidebar.settings',
+    locale: NS,
     children: {
       'settings.trigger': { kind: 'single', scope: 'root' },
       'settings.header': { kind: 'single', scope: 'root' },

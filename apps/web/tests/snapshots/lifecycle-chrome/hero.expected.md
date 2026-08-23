@@ -17,9 +17,7 @@
     - img
     - text: workspace
   - treeitem "New Session" [selected]
-- button "Settings":
-  - img
-  - text: Settings
+- button "Guest"
 - text: Into the Unknown Preview
 - button "Choose workspace":
   - img

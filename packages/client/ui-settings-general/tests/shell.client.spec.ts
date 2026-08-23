@@ -104,6 +104,38 @@ describe('ui-settings apply', () => {
     off()
   })
 
+  it('projects themePreference as system when theme is unbound', async () => {
+    const b = await bench()
+    declare(b.slots)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const injected = injectedOf(b.slots)
+    expect(injected.hooks.themePreference.getSnapshot()).toBe('system')
+    expect(injected.setTheme).toBeUndefined()
+    expect(b.slots.entries('sidebar.settings')[0]!.locale).toBe('settings')
+    const off = injected.hooks.themePreference.subscribe(() => {})
+    off()
+  })
+
+  it('projects themePreference and setTheme from a bound theme service', async () => {
+    const b = await bench()
+    const setTheme = vi.fn()
+    b.ctx.provide('theme', {
+      getTheme: () => ({ preference: 'dark' }),
+      setTheme,
+    } as never)
+    declare(b.slots)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const injected = injectedOf(b.slots)
+    expect(injected.hooks.themePreference.getSnapshot()).toBe('dark')
+    const listener = vi.fn()
+    const off = injected.hooks.themePreference.subscribe(listener)
+    b.ctx.emit('theme/change', {} as never)
+    expect(listener).toHaveBeenCalled()
+    injected.setTheme!('system')
+    expect(setTheme).toHaveBeenCalledWith('system')
+    off()
+  })
+
   it('projects onboarding entries into stable coordinator order', async () => {
     const b = await bench()
     declare(b.slots)

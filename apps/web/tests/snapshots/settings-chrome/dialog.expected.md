@@ -1,6 +1,7 @@
 - dialog "设置":
   - navigation:
     - text: 设置
+    - button "账户"
     - button "通用设置":
       - img
       - text: 通用设置

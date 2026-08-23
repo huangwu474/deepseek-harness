@@ -4,23 +4,31 @@ import { useEffect, useState } from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { SettingsRootComponentProps } from '../src/client/shell-contract.ts'
 import { SettingsRoot } from '../src/client/SettingsRoot.tsx'
+import { en } from '../src/client/locales.ts'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  Reflect.deleteProperty(globalThis, 'dshDesktop')
+})
 
 type Row = { id: string; order: number; label: string }
 type Step = { id: string; order: number }
 
 /** Slot-content stand-ins: the shell renders whatever the seats contribute. */
 const SEAT_CONTENT: Record<string, string> = {
-  'settings.trigger': 'Settings',
+  'settings.trigger': 'Guest',
   'settings.header': 'Settings Title',
   'settings.action': 'Open configuration file',
   'settings.close': 'Close',
 }
 
+const t: SettingsRootComponentProps['t'] = key => (en as Record<string, string>)[key] ?? key
+
 function mount({
   wide = true,
   onboardingActive = true,
+  setTheme,
+  preference = 'system',
   rows = [
     { id: 'general', order: 0, label: 'General' },
     { id: 'models', order: 10, label: 'Models' },
@@ -30,7 +38,14 @@ function mount({
     { id: 'welcome', order: -100 },
     { id: 'credential', order: 0 },
   ],
-}: { wide?: boolean; onboardingActive?: boolean; rows?: Row[]; steps?: Step[] } = {}) {
+}: {
+  wide?: boolean
+  onboardingActive?: boolean
+  rows?: Row[]
+  steps?: Step[]
+  setTheme?: (preference: 'light' | 'dark' | 'system') => void
+  preference?: 'light' | 'dark' | 'system'
+} = {}) {
   // Mutable row source standing in for the bound useSections hook; bump()
   // plays a ledger change through the same observable contract.
   let current = rows
@@ -50,10 +65,13 @@ function mount({
     })) as never
   const unusedHook = (() => { throw new Error('unused by SettingsRoot') }) as never
   const props: SettingsRootComponentProps = {
+    t,
     useSessions,
     useWorkspaces: unusedHook,
     wide,
     useOnboardingSteps: select => select(steps),
+    useThemePreference: select => select(preference),
+    ...(setTheme === undefined ? {} : { setTheme }),
     useSections: (select) => {
       const [, force] = useState(0)
       useEffect(() => {
@@ -75,25 +93,155 @@ function mount({
   return { view, renderSlot, bump, listeners }
 }
 
-function openPanel() {
-  fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+function openMenu() {
+  fireEvent.click(screen.getByRole('button', { name: 'Guest' }))
 }
 
-describe('SettingsRoot trigger', () => {
-  it('renders the trigger seat content as the accessible name (no aria-label of its own)', () => {
+function openPanel() {
+  openMenu()
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Settings' }))
+}
+
+describe('SettingsRoot account trigger', () => {
+  it('opens a menu from the trigger, then Settings from a menuitem', () => {
     const { renderSlot } = mount()
-    const trigger = screen.getByRole('button', { name: 'Settings' })
+    const trigger = screen.getByRole('button', { name: 'Guest' })
     expect(trigger.hasAttribute('aria-label')).toBe(false)
+    expect(trigger.getAttribute('aria-haspopup')).toBe('menu')
     expect(renderSlot).toHaveBeenCalledWith('settings.trigger', { wide: true })
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
-    fireEvent.click(trigger)
+    openMenu()
+    expect(screen.getByRole('menu')).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Guest', expanded: true })).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Settings' }))
     expect(screen.getByRole('dialog')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Settings', expanded: true })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Guest', expanded: false })).toBeTruthy()
+  })
+
+  it('toggles the menu closed from the trigger and from Escape', () => {
+    mount()
+    const trigger = screen.getByRole('button', { name: 'Guest' })
+    fireEvent.click(trigger)
+    expect(screen.getByRole('menu')).toBeTruthy()
+    fireEvent.click(trigger)
+    expect(screen.queryByRole('menu')).toBeNull()
+    fireEvent.click(trigger)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('hands the rail state to the trigger seat', () => {
     const { renderSlot } = mount({ wide: false })
     expect(renderSlot).toHaveBeenCalledWith('settings.trigger', { wide: false })
+  })
+
+  it('omits Appearance without setTheme, and desktop rows without dshDesktop', () => {
+    mount()
+    openMenu()
+    expect(screen.queryByRole('menuitem', { name: 'Appearance' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: 'Check for updates' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: 'Log out' })).toBeNull()
+    expect(screen.getByRole('menuitem', { name: 'Help & feedback' })).toBeTruthy()
+  })
+
+  it('writes the theme preference from the Appearance submenu', () => {
+    const setTheme = vi.fn()
+    mount({ setTheme, preference: 'dark' })
+    openMenu()
+    const appearance = screen.getByRole('menuitem', { name: 'Appearance' })
+    fireEvent.mouseEnter(appearance.parentElement!)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Light' }))
+    expect(setTheme).toHaveBeenCalledWith('light')
+    openMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Appearance' }))
+    expect(setTheme).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows a local help notice without leaving the page', () => {
+    mount()
+    openMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Help & feedback' }))
+    expect(screen.getByRole('dialog', { name: 'Help & feedback' })).toBeTruthy()
+    expect(screen.getByText(/CORKS runs on this computer/)).toBeTruthy()
+    fireEvent.click(screen.getByText('Close'))
+    expect(screen.queryByRole('dialog', { name: 'Help & feedback' })).toBeNull()
+  })
+
+  it('calls desktop logout and update check when preload APIs exist', async () => {
+    const logout = vi.fn(async () => ({ ok: true }))
+    const checkUpdates = vi.fn(async () => ({ ok: true }))
+    ;(globalThis as unknown as { dshDesktop: { logout: typeof logout; checkUpdates: typeof checkUpdates } }).dshDesktop = {
+      logout,
+      checkUpdates,
+    }
+    mount()
+    openMenu()
+    expect(screen.getByRole('menuitem', { name: 'Check for updates' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Check for updates' }))
+    await vi.waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'Check for updates' })).toBeTruthy()
+    })
+    expect(checkUpdates).toHaveBeenCalledOnce()
+    expect(screen.getByText(/source preview/i)).toBeTruthy()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog', { name: 'Check for updates' })).toBeNull()
+    openMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Log out' }))
+    expect(logout).toHaveBeenCalledOnce()
+  })
+
+  it('omits logout and updates when only one desktop session method exists', () => {
+    ;(globalThis as unknown as {
+      dshDesktop: { logout: () => Promise<{ ok: true }>; setGuestDisplayName: () => Promise<{ ok: true }> }
+    }).dshDesktop = {
+      logout: async () => ({ ok: true }),
+      setGuestDisplayName: async () => ({ ok: true }),
+    }
+    mount()
+    openMenu()
+    expect(screen.queryByRole('menuitem', { name: 'Check for updates' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: 'Log out' })).toBeNull()
+  })
+
+  it('shows the preload message or error from an update check', async () => {
+    const checkUpdates = vi.fn()
+      .mockResolvedValueOnce({ ok: true, message: 'already current' })
+      .mockResolvedValueOnce({ ok: false, error: 'offline' })
+      .mockResolvedValueOnce({ ok: false })
+    ;(globalThis as unknown as {
+      dshDesktop: { logout: () => Promise<{ ok: true }>; checkUpdates: typeof checkUpdates }
+    }).dshDesktop = {
+      logout: async () => ({ ok: true }),
+      checkUpdates,
+    }
+    mount()
+    openMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Check for updates' }))
+    expect(await screen.findByText('already current')).toBeTruthy()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    openMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Check for updates' }))
+    expect(await screen.findByText('offline')).toBeTruthy()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    openMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Check for updates' }))
+    expect(await screen.findByText(/source preview/i)).toBeTruthy()
+  })
+
+  it('writes dark and system appearance ids', () => {
+    const setTheme = vi.fn()
+    mount({ setTheme, preference: 'light' })
+    openMenu()
+    const appearance = screen.getByRole('menuitem', { name: 'Appearance' })
+    fireEvent.mouseEnter(appearance.parentElement!)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Dark' }))
+    expect(setTheme).toHaveBeenCalledWith('dark')
+    openMenu()
+    fireEvent.mouseEnter(screen.getByRole('menuitem', { name: 'Appearance' }).parentElement!)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'System' }))
+    expect(setTheme).toHaveBeenCalledWith('system')
   })
 })
 
@@ -173,6 +321,7 @@ describe('SettingsPanel navigation', () => {
   it('gives every section a nav glyph, distinct for the ids the shell knows', () => {
     mount({
       rows: [
+        { id: 'account', order: -10, label: 'Account' },
         { id: 'general', order: 0, label: 'General' },
         { id: 'models', order: 10, label: 'Models' },
         { id: 'agent-presets', order: 20, label: 'Agent presets' },
@@ -182,14 +331,13 @@ describe('SettingsPanel navigation', () => {
     })
     openPanel()
     // Glyphs carry no id of their own, so the drawn paths are what tells them apart.
-    const glyphs = ['General', 'Models', 'Agent presets', 'Plugins', 'Contributed']
+    const glyphs = ['Account', 'General', 'Models', 'Agent presets', 'Plugins', 'Contributed']
       .map(name => screen.getByRole('button', { name }).querySelector('svg')?.innerHTML)
 
     expect(glyphs.every(glyph => glyph !== undefined && glyph !== '')).toBe(true)
-    // The three ids the shell names get their own glyph; every other section —
-    // including one this package never heard of — shares the gear.
-    expect(new Set(glyphs.slice(0, 4)).size).toBe(4)
-    expect(glyphs[4]).toBe(glyphs[0])
+    // Named ids get their own glyph; an unknown section shares the gear with General.
+    expect(new Set(glyphs.slice(0, 5)).size).toBe(5)
+    expect(glyphs[5]).toBe(glyphs[1])
   })
 
   it('switches the rendered section on nav click', () => {

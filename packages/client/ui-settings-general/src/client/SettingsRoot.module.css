@@ -1,23 +1,43 @@
 /* Settings shell (figma 501:29904 mask context / 501:29947 panel): sidebar
-   foot trigger row + centered 1080x700 modal panel. The trigger uses the
-   sidebar foot's 42px row / 36px rail circle rhythm; the
-   panel is a two-column layout — 188px nav rail + content column with a
-   54px header and the 24px-padded options area. */
+ * foot account bar + centered modal panel. Wide mode: full-width 40px bar
+ * (circular mark + guest label). Rail: 36px circle. The panel is a
+ * two-column layout — 188px nav rail + content column with a 54px header
+ * and the 24px-padded options area. */
 
-/* Trigger row: the 42px foot-row box shared with the Cordis footer action. */
+/* Menu's root is inline-flex; wrap it so the foot trigger can stretch. */
+.accountMenu {
+  width: 100%;
+}
+
+.accountMenu > :global(*) {
+  display: flex;
+  width: 100%;
+}
+
+.accountMenuRail {
+  width: auto;
+}
+
+.accountMenuRail > :global(*) {
+  display: inline-flex;
+  width: auto;
+}
+
+/* Full-width account bar — visible fill so occupancy matches a foot control. */
 .trigger {
-  flex: none;
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 8px;
-  width: calc(100% + 4px);
-  height: 42px;
-  margin: 4px -2px;
-  padding: 0 10px 0 8px;
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  margin: 4px 0;
+  padding: 0 12px 0 6px;
   box-sizing: border-box;
-  border: none;
+  border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 12px;
-  background: transparent;
+  background: var(--dsw-alias-bg-layer-1);
   cursor: pointer;
   overflow: hidden;
   color: var(--dsw-alias-label-primary);
@@ -32,13 +52,20 @@
 
 /* Rail trigger: the same 36x36 circle box as the other rail controls. */
 .trigger.rail {
+  flex: none;
   width: 36px;
   height: 36px;
   margin: 8px 0 10px;
   justify-content: center;
   gap: 0;
   padding: 0;
+  border: none;
   border-radius: 50%;
+  background: transparent;
+}
+
+.trigger.rail:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .triggerLabel {

@@ -1,7 +1,7 @@
 /**
  * Optional Electron account API the loopback Web UI may call through preload.
  * A browser tab has no such object; the Account page then omits rename,
- * logout, and clear.
+ * logout, and clear, and the account menu omits logout and update checks.
  */
 
 /** Result of a desktop account invoke. Never includes a navigation URL. */
@@ -10,6 +10,8 @@ export interface DesktopAccountResult {
   ok: boolean
   /** Present when `ok` is false. */
   error?: string
+  /** Present for a successful update check. */
+  message?: string
 }
 
 /** Preload-exposed account methods. Each method is optional. */
@@ -19,6 +21,11 @@ export interface DesktopAccountApi {
    * @returns Whether navigation started.
    */
   logout?: () => Promise<DesktopAccountResult>
+  /**
+   * Ask main whether a packaged update exists.
+   * @returns A localized status line. Never a download URL.
+   */
+  checkUpdates?: () => Promise<DesktopAccountResult>
   /**
    * Read the guest display name saved at the login gate.
    * @returns Normalized name, or `undefined` when unset.
@@ -56,6 +63,17 @@ export function notifyGuestDisplayNameChanged(): void {
  */
 export function readDesktopAccountApi(): DesktopAccountApi | undefined {
   return (globalThis as { dshDesktop?: DesktopAccountApi }).dshDesktop
+}
+
+/**
+ * Whether the account menu may render Check for updates and Log out.
+ * Both preload methods must exist; a partial API still serves Account page
+ * get/set/clear independently.
+ * @param api - preload object, or `undefined` in a browser tab.
+ * @returns True only when logout and checkUpdates are both functions.
+ */
+export function hasDesktopSessionMenu(api: DesktopAccountApi | undefined): boolean {
+  return typeof api?.logout === 'function' && typeof api?.checkUpdates === 'function'
 }
 
 /**

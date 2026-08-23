@@ -1,11 +1,16 @@
 /**
  * Shell chrome content registered into the shell's trigger/header seats: the
- * trigger row icon + label (figma sidebar foot) and the panel title text.
+ * account-row mark + display label (sidebar foot) and the panel title text.
  * The shell renders the surrounding chrome (button, nav heading row) and
  * reads each entry's `label` option for aria text.
  */
-import { IconSettingsOutline14, IconSettingsOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useEffect, useState } from 'react'
+import { CorksLogo } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import {
+  GUEST_DISPLAY_NAME_CHANGED,
+  readDesktopGuestDisplayName,
+} from './desktop-account.ts'
 import css from './chrome.module.css'
 
 /** Trigger content props: the sidebar column state + the standard locale seat. */
@@ -15,15 +20,36 @@ export type TriggerContentProps = PropsRuntime<'settings.trigger'> & PropsLocale
 export type HeaderContentProps = PropsRuntime<'settings.header'> & PropsLocale<'settings'>
 
 /**
- * Render the trigger row content (icon; label only in the wide column).
+ * Render the account-row trigger content (mark; label always present so the
+ * rail keeps an accessible name). Desktop guest sessions may replace the
+ * localized Guest string with the name saved at the login gate.
  * @param props - composed slot props.
  * @returns the trigger content fragment.
  */
 export function TriggerContent({ wide, t }: TriggerContentProps) {
+  const fallback = t('account.guest')
+  const [label, setLabel] = useState(fallback)
+  useEffect(() => {
+    let cancelled = false
+    const refresh = (): void => {
+      setLabel(fallback)
+      void readDesktopGuestDisplayName().then((name) => {
+        if (!cancelled) setLabel(name ?? fallback)
+      })
+    }
+    refresh()
+    globalThis.addEventListener(GUEST_DISPLAY_NAME_CHANGED, refresh)
+    return () => {
+      cancelled = true
+      globalThis.removeEventListener(GUEST_DISPLAY_NAME_CHANGED, refresh)
+    }
+  }, [fallback])
   return (
     <>
-      {wide ? <IconSettingsOutline16 size={16} /> : <IconSettingsOutline14 size={18} />}
-      {wide && <span className={css.triggerLabel}>{t('trigger')}</span>}
+      <span className={css.avatar} aria-hidden="true">
+        <CorksLogo size={18} />
+      </span>
+      <span className={wide ? css.triggerLabel : css.hiddenLabel}>{label}</span>
     </>
   )
 }

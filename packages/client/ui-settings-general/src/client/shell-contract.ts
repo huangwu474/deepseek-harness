@@ -6,7 +6,9 @@
  * reference graph closes a cycle through ui-sidebar → ui-layout → ui-theme.
  * The settings SLOT types (what registrants contribute) stay in ui-settings.
  */
-import type { HostObservable, InjectFace, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type {
+  HostObservable, InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime,
+} from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls ui-sidebar's SlotMap merge (the 'sidebar.settings' entry)
 // into every program that sees this contract.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
@@ -30,6 +32,8 @@ export interface SettingsOnboardingStep {
  * Registrant-private injected share of the settings shell (assembled in
  * apply): the ledger's nav-row projection as a hooks-compartment source —
  * the shell reads no locale state and subscribes through the bound hook.
+ * Theme preference is optional: a composition without ui-theme still opens
+ * Settings, and Appearance is omitted from the account menu.
  */
 export type SettingsRootInjected = {
   hooks: {
@@ -37,8 +41,18 @@ export type SettingsRootInjected = {
     sections: HostObservable<readonly SettingsSectionRow[]>
     /** settings.onboarding ledger projected into coordinator order. */
     onboardingSteps: HostObservable<readonly SettingsOnboardingStep[]>
+    /** Persisted appearance preference; `system` when no theme service is bound. */
+    themePreference: HostObservable<AccountThemePreference>
   }
+  /**
+   * Write the appearance preference. Absent when the theme service is not
+   * mounted; the account menu then omits the Appearance row.
+   */
+  setTheme?: (preference: AccountThemePreference) => void
 }
+
+/** Built-in appearance ids the account menu may write. */
+export type AccountThemePreference = 'light' | 'dark' | 'system'
 
 /**
  * Full component props of the settings shell root: the sidebar owner share
@@ -57,3 +71,4 @@ export type SettingsRootComponentProps =
     | 'settings.onboarding'
   >
   & InjectFace<SettingsRootInjected>
+  & PropsLocale<'settings'>

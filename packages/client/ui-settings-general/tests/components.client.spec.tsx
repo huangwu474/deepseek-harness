@@ -33,16 +33,58 @@ const unusedHook = (() => { throw new Error('unused by settings-general componen
 const kit = { useSessions: unusedHook, useWorkspaces: unusedHook }
 
 describe('chrome content', () => {
-  it('TriggerContent renders the icon with the label in the wide column', () => {
-    const { container } = render(<TriggerContent {...kit} wide t={t} />)
-    expect(container.querySelector('svg')).toBeTruthy()
-    expect(screen.getByText('Settings')).toBeTruthy()
+  afterEach(() => {
+    Reflect.deleteProperty(globalThis, 'dshDesktop')
   })
 
-  it('TriggerContent drops the label in the rail state', () => {
+  it('TriggerContent renders the cork mark with the guest label in the wide column', () => {
+    const { container } = render(<TriggerContent {...kit} wide t={t} />)
+    expect(container.querySelector('svg')).toBeTruthy()
+    expect(screen.getByText('Guest')).toBeTruthy()
+  })
+
+  it('TriggerContent keeps an accessible guest name in the rail state', () => {
     const { container } = render(<TriggerContent {...kit} wide={false} t={t} />)
     expect(container.querySelector('svg')).toBeTruthy()
-    expect(screen.queryByText('Settings')).toBeNull()
+    expect(container.querySelector('[class*="hiddenLabel"]')?.textContent).toBe('Guest')
+  })
+
+  it('TriggerContent prefers a desktop guest display name when present', async () => {
+    ;(globalThis as unknown as {
+      dshDesktop: { getGuestDisplayName: () => Promise<string | undefined> }
+    }).dshDesktop = {
+      getGuestDisplayName: async () => '阿木',
+    }
+    render(<TriggerContent {...kit} wide t={t} />)
+    expect(await screen.findByText('阿木')).toBeTruthy()
+  })
+
+  it('TriggerContent ignores a late display-name read after unmount', async () => {
+    let resolveName!: (value: string) => void
+    ;(globalThis as unknown as {
+      dshDesktop: { getGuestDisplayName: () => Promise<string> }
+    }).dshDesktop = {
+      getGuestDisplayName: () => new Promise<string>((resolve) => { resolveName = resolve }),
+    }
+    const view = render(<TriggerContent {...kit} wide t={t} />)
+    view.unmount()
+    resolveName('late')
+    await Promise.resolve()
+    expect(screen.queryByText('late')).toBeNull()
+  })
+
+  it('TriggerContent rereads the guest name after a same-document write', async () => {
+    let stored: string | undefined = '阿木'
+    ;(globalThis as unknown as {
+      dshDesktop: { getGuestDisplayName: () => Promise<string | undefined> }
+    }).dshDesktop = {
+      getGuestDisplayName: async () => stored,
+    }
+    render(<TriggerContent {...kit} wide t={t} />)
+    expect(await screen.findByText('阿木')).toBeTruthy()
+    stored = '青砚'
+    globalThis.dispatchEvent(new Event(GUEST_DISPLAY_NAME_CHANGED))
+    expect(await screen.findByText('青砚')).toBeTruthy()
   })
 
   it('HeaderContent and CloseLabel render their translated text', () => {

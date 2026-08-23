@@ -24,6 +24,14 @@ export const zh = {
   'account.clearConfirm': '确认清除',
   'account.clearError': '无法清除游客资料',
   'account.guest': '游客',
+  'account.appearance': '外观',
+  'account.light': '浅色',
+  'account.dark': '深色',
+  'account.system': '跟随系统',
+  'account.help': '帮助与反馈',
+  'account.helpBody': 'CORKS 目前在本机运行。对话与工作区文件留在这台电脑上。账号登录暂未开放。',
+  'account.updates': '检查更新',
+  'account.updatesNone': '当前为源码预览，没有安装包更新。',
   'account.logout': '退出登录',
 } satisfies Record<string, string>
 
@@ -54,5 +62,13 @@ export const en = {
   'account.clearConfirm': 'Clear',
   'account.clearError': 'Could not clear the guest profile',
   'account.guest': 'Guest',
+  'account.appearance': 'Appearance',
+  'account.light': 'Light',
+  'account.dark': 'Dark',
+  'account.system': 'System',
+  'account.help': 'Help & feedback',
+  'account.helpBody': 'CORKS runs on this computer. Conversations and workspace files stay here. Account sign-in is not available yet.',
+  'account.updates': 'Check for updates',
+  'account.updatesNone': 'This is a source preview. No packaged updates are available.',
   'account.logout': 'Log out',
 } satisfies Record<SettingsKey, string>

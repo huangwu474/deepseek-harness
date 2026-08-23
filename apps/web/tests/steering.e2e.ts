@@ -14,7 +14,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, openSettingsDialog } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/steering', import.meta.url))
 const FIXTURE = join(SNAPSHOT_DIR, 'session.jsonl')
@@ -256,7 +256,7 @@ describe('web e2e: composer shortcut follows the swapped busy behavior', () => {
 
   it.skipIf(MODE === 'record')('queues Cmd+Enter when plain Enter is configured to Steer', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-swapped-shortcut'))
-    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await openSettingsDialog(page, 'en')
     const dialog = page.getByRole('dialog', { name: 'Settings' })
     await dialog.getByRole('button', { name: 'Queue' }).click()
     await page.getByRole('menuitem', { name: 'Steer' }).click()

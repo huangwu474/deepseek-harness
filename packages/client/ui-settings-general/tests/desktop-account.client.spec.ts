@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   GUEST_DISPLAY_NAME_CHANGED,
+  hasDesktopSessionMenu,
   notifyGuestDisplayNameChanged,
   readDesktopAccountApi,
   readDesktopGuestDisplayName,
@@ -59,6 +60,25 @@ describe('readDesktopGuestDisplayName', () => {
       getGuestDisplayName: async () => { throw new Error('invoke failed') },
     })
     await expect(readDesktopGuestDisplayName()).resolves.toBeUndefined()
+  })
+})
+
+describe('hasDesktopSessionMenu', () => {
+  it('requires both logout and checkUpdates', () => {
+    expect(hasDesktopSessionMenu(undefined)).toBe(false)
+    expect(hasDesktopSessionMenu({
+      logout: async () => ({ ok: true }),
+    })).toBe(false)
+    expect(hasDesktopSessionMenu({
+      checkUpdates: async () => ({ ok: true }),
+    })).toBe(false)
+    expect(hasDesktopSessionMenu({
+      setGuestDisplayName: async () => ({ ok: true }),
+    })).toBe(false)
+    expect(hasDesktopSessionMenu({
+      logout: async () => ({ ok: true }),
+      checkUpdates: async () => ({ ok: true }),
+    })).toBe(true)
   })
 })
 

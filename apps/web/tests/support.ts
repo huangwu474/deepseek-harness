@@ -110,6 +110,23 @@ export async function connectFreshWorkspaceZh(page: Page, root: string, name = '
     .waitFor({ timeout: 15_000 })
 }
 
+/**
+ * Open the settings modal through the sidebar account menu.
+ * The foot trigger is the guest account row; Settings is a menuitem.
+ * @param page - Playwright page.
+ * @param locale - which dictionary the client is showing.
+ * @returns The settings dialog locator after it is visible.
+ */
+export async function openSettingsDialog(page: Page, locale: 'zh' | 'en' = 'zh') {
+  const account = locale === 'zh' ? '游客' : 'Guest'
+  const settings = locale === 'zh' ? '设置' : 'Settings'
+  await page.getByRole('button', { name: account, exact: true }).click()
+  await page.getByRole('menuitem', { name: settings, exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: settings })
+  await dialog.waitFor({ timeout: 10_000 })
+  return dialog
+}
+
 /** Failure evidence goes to the gitignored .artifacts/ (repo convention). */
 export async function saveFailureShot(page: Page, name: string): Promise<void> {
   const dir = fileURLToPath(new URL('../../../.artifacts', import.meta.url))
