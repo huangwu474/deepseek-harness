@@ -8,6 +8,7 @@ import { TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-settings-general/client'
 import { CloseLabel, HeaderContent, TriggerContent } from '../src/client/chrome.tsx'
+import { AccountSection } from '../src/client/AccountSection.tsx'
 import { GeneralSection } from '../src/client/GeneralSection.tsx'
 import { SettingsDocumentAction } from '../src/client/SettingsDocumentAction.tsx'
 import type { SettingsDocumentActionInjected } from '../src/client/SettingsDocumentAction.tsx'
@@ -77,6 +78,10 @@ function generalEntry(slots: SlotRegistry) {
   return slots.entries('settings.section').find(e => e.component === GeneralSection)
 }
 
+function accountEntry(slots: SlotRegistry) {
+  return slots.entries('settings.section').find(e => e.component === AccountSection)
+}
+
 describe('ui-settings-general apply', () => {
   it('declares the services it uses', () => {
     expect(inject).toEqual(['slots', 'locale', 'connection', 'settingsScope'])
@@ -87,8 +92,17 @@ describe('ui-settings-general apply', () => {
     declare(before.slots)
     await before.ctx.plugin({ inject: [...inject], apply }).await()
     for (const [name, component] of SEATS) {
+      if (name === 'settings.section') {
+        const components = before.slots.entries(name).map(e => e.component)
+        expect(components).toContain(AccountSection)
+        expect(components).toContain(GeneralSection)
+        continue
+      }
       expect(before.slots.entries(name)[0]!.component).toBe(component)
     }
+    const account = accountEntry(before.slots)!
+    expect(account.options).toMatchObject({ id: 'account', order: -10 })
+    expect(resolveSlotLabel(account.options.label)).toBe('账户')
     const entry = generalEntry(before.slots)!
     expect(entry.options).toMatchObject({ id: 'general', order: 0 })
     // The nav label is a locale-following thunk; owners resolve at read time.
@@ -112,6 +126,12 @@ describe('ui-settings-general apply', () => {
     declare(after.slots)
     await Promise.resolve()
     for (const [name, component] of SEATS) {
+      if (name === 'settings.section') {
+        expect(after.slots.entries(name).map(e => e.component)).toEqual(
+          expect.arrayContaining([AccountSection, GeneralSection]),
+        )
+        continue
+      }
       expect(after.slots.entries(name)[0]!.component).toBe(component)
       // The self-inflicted ledger notifications hit the duplicate guard.
       expect(after.slots.entries(name)).toHaveLength(1)
@@ -146,10 +166,16 @@ describe('ui-settings-general apply', () => {
     // subscription), not re-registration.
     SEATS.forEach(([name], i) => {
       expect(b.slots.getVersion(name)).toBe(zhVersions[i]!)
+      if (name === 'settings.section') {
+        expect(b.slots.entries(name)).toHaveLength(2)
+        return
+      }
       expect(b.slots.entries(name)).toHaveLength(1)
     })
+    expect(resolveSlotLabel(accountEntry(b.slots)!.options.label)).toBe('Account')
     expect(resolveSlotLabel(generalEntry(b.slots)!.options.label)).toBe('General')
     b.locale.setLocale('zh')
+    expect(resolveSlotLabel(accountEntry(b.slots)!.options.label)).toBe('账户')
     expect(resolveSlotLabel(generalEntry(b.slots)!.options.label)).toBe('通用设置')
   })
 
@@ -191,6 +217,12 @@ describe('ui-settings-general apply', () => {
     declare(b.slots)
     await Promise.resolve()
     for (const [name, component] of SEATS) {
+      if (name === 'settings.section') {
+        expect(b.slots.entries(name).map(e => e.component)).toEqual(
+          expect.arrayContaining([AccountSection, GeneralSection]),
+        )
+        continue
+      }
       expect(b.slots.entries(name)[0]!.component).toBe(component)
     }
     expect(b.slots.entries('settings.general.item')).toEqual([])

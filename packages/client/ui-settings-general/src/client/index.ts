@@ -3,7 +3,8 @@
  * `sidebar.settings` occupant — panel chrome, section navigation, and the
  * onboarding stage — and registers everything on the Settings pages that
  * belongs to no single feature: the trigger/header chrome content,
- * local-document action, General section, and `settings` dictionaries.
+ * local-document action, Account and General sections, and `settings`
+ * dictionaries.
  * Feature-owned rows and sections stay with their features.
  * Export discipline: packages/client/AGENTS.md.
  */
@@ -21,6 +22,7 @@ import type {
 } from './shell-contract.ts'
 import { SettingsRoot } from './SettingsRoot.tsx'
 import { CloseLabel, HeaderContent, TriggerContent } from './chrome.tsx'
+import { AccountSection } from './AccountSection.tsx'
 import { GeneralSection } from './GeneralSection.tsx'
 import { SettingsDocumentAction } from './SettingsDocumentAction.tsx'
 import type { SettingsDocumentActionInjected } from './SettingsDocumentAction.tsx'
@@ -31,6 +33,9 @@ export type {
   CloseLabelProps, HeaderContentProps, TriggerContentProps,
 } from './chrome.tsx'
 export type {
+  AccountSectionProps,
+} from './AccountSection.tsx'
+export type {
   GeneralSectionComponentProps,
 } from './GeneralSection.tsx'
 export type { SettingsDocumentActionInjected, SettingsDocumentActionProps } from './SettingsDocumentAction.tsx'
@@ -40,12 +45,12 @@ export type { SettingsKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
-    /** Shell chrome + shell-owned General section copy. */
+    /** Shell chrome + shell-owned Account and General section copy. */
     settings: SettingsKey
   }
 }
 
-/** Dictionary namespace owned by this plugin (shell chrome + General copy). */
+/** Dictionary namespace owned by this plugin (shell chrome + Account + General copy). */
 const NS = 'settings'
 
 /**
@@ -56,8 +61,9 @@ const NS = 'settings'
 export const inject = ['slots', 'locale', 'connection', 'settingsScope']
 
 /**
- * Register the `settings` dictionaries, the chrome content, and the General
- * section, each once its slot declaration is on the ledger.
+ * Register the `settings` dictionaries, the chrome content, the Account
+ * section, and the General section, each once its slot declaration is on
+ * the ledger.
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
@@ -166,6 +172,13 @@ export function apply(ctx: ClientContext): void {
   }
   ctx.slots.inject('settings.close', () =>
     ctx.slots.register({ name: 'settings.close', locale: NS }, CloseLabel))
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'account',
+    order: -10,
+    label: () => t('account.nav'),
+    locale: NS,
+  }, AccountSection))
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: 'general',

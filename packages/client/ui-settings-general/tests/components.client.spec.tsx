@@ -4,7 +4,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import type { GeneralSectionComponentProps } from '../src/client/GeneralSection.tsx'
 import { GeneralSection } from '../src/client/GeneralSection.tsx'
+import { AccountSection } from '../src/client/AccountSection.tsx'
 import { CloseLabel, HeaderContent, TriggerContent } from '../src/client/chrome.tsx'
+import {
+  GUEST_DISPLAY_NAME_CHANGED,
+} from '../src/client/desktop-account.ts'
 import type { TriggerContentProps } from '../src/client/chrome.tsx'
 import { SettingsDocumentAction } from '../src/client/SettingsDocumentAction.tsx'
 import { SettingsDescribeMirror } from '@deepseek-ai/dsh-client-ui-settings/src/client/settings-mirror.ts'
@@ -45,6 +49,211 @@ describe('chrome content', () => {
     render(<CloseLabel {...kit} t={t} />)
     expect(screen.getByText('Settings')).toBeTruthy()
     expect(screen.getByText('Close')).toBeTruthy()
+  })
+})
+
+describe('AccountSection', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(globalThis, 'dshDesktop')
+  })
+
+  function installDesktop(api: Record<string, unknown>): void {
+    ;(globalThis as unknown as { dshDesktop: typeof api }).dshDesktop = api
+  }
+
+  it('shows the guest fallback without a desktop API', () => {
+    render(<AccountSection {...kit} close={vi.fn()} t={t} />)
+    expect(screen.getByText('Account management')).toBeTruthy()
+    expect(screen.getByText('Guest')).toBeTruthy()
+    expect(screen.getByText('Local guest')).toBeTruthy()
+    expect(screen.getByText('Profile is stored only on this device')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Log out' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Clear profile' })).toBeNull()
+  })
+
+  it('saves a nickname and notifies same-document listeners', async () => {
+    const setGuestDisplayName = vi.fn(async () => ({ ok: true as const }))
+    installDesktop({
+      logout: async () => ({ ok: true }),
+      getGuestDisplayName: async () => '阿木',
+      setGuestDisplayName,
+      clearGuestProfile: async () => ({ ok: true }),
+    })
+    const seen: string[] = []
+    const listener = (): void => { seen.push('changed') }
+    globalThis.addEventListener(GUEST_DISPLAY_NAME_CHANGED, listener)
+    render(<AccountSection {...kit} close={vi.fn()} t={t} />)
+    expect(await screen.findByText('阿木')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '  青砚  ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => { expect(setGuestDisplayName).toHaveBeenCalledWith('  青砚  ') })
+    expect(seen).toEqual(['changed'])
+    expect(await screen.findByText('青砚')).toBeTruthy()
+    globalThis.removeEventListener(GUEST_DISPLAY_NAME_CHANGED, listener)
+  })
+
+  it('clears a blank nickname back to Guest', async () => {
+    const setGuestDisplayName = vi.fn(async () => ({ ok: true as const }))
+    installDesktop({
+      getGuestDisplayName: async () => '阿木',
+      setGuestDisplayName,
+    })
+    render(<AccountSection {...kit} close={vi.fn()} t={t} />)
+    expect(await screen.findByText('阿木')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '   ' } })
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
+    await waitFor(() => { expect(setGuestDisplayName).toHaveBeenCalledWith('   ') })
+    expect(await screen.findByText('Guest')).toBeTruthy()
+  })
+
+  it('cancels an in-progress edit', async () => {
+    installDesktop({
+      getGuestDisplayName: async () => '阿木',
+      setGuestDisplayName: async () => ({ ok: true }),
+    })
+    render(<AccountSection {...kit} close={vi.fn()} t={t} />)
+    expect(await screen.findByText('阿木')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'discard' } })
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' })
+    expect(screen.queryByRole('textbox')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.getByText('阿木')).toBeTruthy()
+  })
+
+  it('starts an empty draft when no nickname is stored', async () => {
+    installDesktop({
+      setGuestDisplayName: async () => ({ ok: true }),
+    })
+    render(<AccountSection {...kit} close={vi.fn()} t={t} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    expect((screen.getByRole('textbox') as HTMLInputElement).value).toBe('')
+  })
+
+  it('reports a save failure and keeps the editor open', async () => {
+    const setGuestDisplayName = vi.fn()
+      .mockResolvedValueOnce({ ok: false, error: 'disk full' })
+      .mockResolvedValueOnce({ ok: false })
+    installDesktop({ setGuestDisplayName })
+    render(<AccountSection {...kit} close={vi.fn()} t={t} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect((await screen.findByRole('alert')).textContent).toBe('disk full')
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect((await screen.findByRole('alert')).textContent).toBe('Could not save the display name')
+    expect(screen.getByRole('textbox')).toBeTruthy()
+  })
+
+  it('logs out through preload after closing settings', async () => {
+    const logout = vi.fn(async () => ({ ok: true as const }))
+    const close = vi.fn()
+    installDesktop({ logout })
+    render(<AccountSection {...kit} close={close} t={t} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Log out' }))
+    expect(close).toHaveBeenCalledOnce()
+    expect(logout).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Clear profile' })).toBeNull()
+  })
+
+  it('clears the guest profile only after confirmation', async () => {
+    const clearGuestProfile = vi.fn(async () => ({ ok: true as const }))
+    installDesktop({
+      getGuestDisplayName: async () => '青砚',
+      setGuestDisplayName: async () => ({ ok: true }),
+      clearGuestProfile,
+    })
+    const seen: string[] = []
+    const listener = (): void => { seen.push('changed') }
+    globalThis.addEventListener(GUEST_DISPLAY_NAME_CHANGED, listener)
+    render(<AccountSection {...kit} close={vi.fn()} t={t} />)
+    expect(await screen.findByText('青砚')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear profile' }))
+    expect(clearGuestProfile).not.toHaveBeenCalled()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(clearGuestProfile).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear profile' }))
+    fireEvent.click(screen.getByText('Cancel'))
+    expect(clearGuestProfile).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear profile' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    await waitFor(() => { expect(clearGuestProfile).toHaveBeenCalledOnce() })
+    expect(await screen.findByText('Guest')).toBeTruthy()
+    expect(seen).toEqual(['changed'])
+    globalThis.removeEventListener(GUEST_DISPLAY_NAME_CHANGED, listener)
+  })
+
+  it('reports a clear failure without wiping the nickname', async () => {
+    const clearGuestProfile = vi.fn()
+      .mockResolvedValueOnce({ ok: false, error: 'locked' })
+      .mockResolvedValueOnce({ ok: false })
+    installDesktop({
+      getGuestDisplayName: async () => '青砚',
+      clearGuestProfile,
+    })
+    render(<AccountSection {...kit} close={vi.fn()} t={t} />)
+    expect(await screen.findByText('青砚')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear profile' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect((await screen.findByRole('alert')).textContent).toBe('locked')
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect((await screen.findByRole('alert')).textContent).toBe('Could not clear the guest profile')
+    expect(screen.getByText('青砚')).toBeTruthy()
+  })
+
+  it('ignores a late display-name read after unmount', async () => {
+    let resolveName!: (value: string) => void
+    installDesktop({
+      getGuestDisplayName: () => new Promise<string>((resolve) => { resolveName = resolve }),
+    })
+    const view = render(<AccountSection {...kit} close={vi.fn()} t={t} />)
+    view.unmount()
+    resolveName('late')
+    await Promise.resolve()
+    expect(screen.queryByText('late')).toBeNull()
+  })
+
+  it('does not save or clear when the matching preload method is removed', async () => {
+    const api: {
+      setGuestDisplayName?: () => Promise<{ ok: true }>
+      clearGuestProfile?: () => Promise<{ ok: true }>
+    } = {
+      setGuestDisplayName: async () => ({ ok: true }),
+      clearGuestProfile: async () => ({ ok: true }),
+    }
+    installDesktop(api)
+    render(<AccountSection {...kit} close={vi.fn()} t={t} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    delete api.setGuestDisplayName
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.getByRole('textbox')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    delete api.clearGuestProfile
+    fireEvent.click(screen.getByRole('button', { name: 'Clear profile' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    await Promise.resolve()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('disables the editor while a save is in flight', async () => {
+    let resolveSave!: (value: { ok: true }) => void
+    installDesktop({
+      setGuestDisplayName: () => new Promise<{ ok: true }>((resolve) => { resolveSave = resolve }),
+    })
+    render(<AccountSection {...kit} close={vi.fn()} t={t} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect((screen.getByRole('textbox') as HTMLInputElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
+    resolveSave({ ok: true })
+    await waitFor(() => { expect(screen.queryByRole('textbox')).toBeNull() })
   })
 })
 

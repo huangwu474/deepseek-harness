@@ -67,6 +67,22 @@ describe('FishLogo', () => {
   })
 })
 
+describe('CorksLogo', () => {
+  it('renders a square currentColor mark', () => {
+    const { container } = render(<primitives.CorksLogo className="mark" />)
+    const svg = container.querySelector('svg')!
+    expect(svg.getAttribute('width')).toBe('24')
+    expect(svg.getAttribute('height')).toBe('24')
+    expect(svg.getAttribute('viewBox')).toBe('0 0 24 24')
+    expect(svg.classList.contains('mark')).toBe(true)
+    expect(container.innerHTML).toContain('currentColor')
+    expect(container.innerHTML).not.toMatch(/#[0-9a-fA-F]{3,8}"/)
+    expect(container.querySelectorAll('path')).toHaveLength(4)
+    expect(container.querySelectorAll('rect')).toHaveLength(1)
+    expect(container.innerHTML).toContain('stroke-linecap="round"')
+  })
+})
+
 describe('BrandWordmark', () => {
   it('can render the name artwork with or without its leading mark', () => {
     const view = render(<primitives.BrandWordmark />)

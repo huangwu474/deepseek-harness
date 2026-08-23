@@ -78,15 +78,17 @@ describe('ui-settings apply', () => {
     declare(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
     const { sections } = injectedOf(b.slots).hooks
-    // This package registers the General section itself; every other section
+    // This package registers Account and General; every other section
     // arrives from a feature registrant.
+    const ACCOUNT = { id: 'account', order: -10, label: 'account.nav' }
     const GENERAL = { id: 'general', order: 0, label: 'general.nav' }
-    expect(sections.getSnapshot()).toEqual([GENERAL])
+    expect(sections.getSnapshot()).toEqual([ACCOUNT, GENERAL])
     b.slots.register({ name: 'settings.section', id: 'z', order: 20, label: 'Z' } as never, () => null)
     // No order and no label: both projection defaults apply.
     b.slots.register({ name: 'settings.section', id: 'a' } as never, () => null)
     const rows = sections.getSnapshot()
     expect(rows).toEqual([
+      ACCOUNT,
       GENERAL,
       { id: 'a', order: 0, label: '' },
       { id: 'z', order: 20, label: 'Z' },
