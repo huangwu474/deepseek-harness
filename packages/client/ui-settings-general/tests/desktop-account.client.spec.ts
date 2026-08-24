@@ -5,11 +5,16 @@ import {
   notifyGuestDisplayNameChanged,
   readDesktopAccountApi,
   readDesktopGuestDisplayName,
+  type DesktopAccountApi,
 } from '../src/client/desktop-account.ts'
 
 afterEach(() => {
   Reflect.deleteProperty(globalThis, 'dshDesktop')
 })
+
+function installDesktop(api: DesktopAccountApi): void {
+  ;(globalThis as { dshDesktop?: DesktopAccountApi }).dshDesktop = api
+}
 
 describe('readDesktopAccountApi', () => {
   it('returns undefined without a preload object', () => {
@@ -17,11 +22,11 @@ describe('readDesktopAccountApi', () => {
   })
 
   it('returns the preload object when present', () => {
-    const api = {
+    const api: DesktopAccountApi = {
       logout: async () => ({ ok: true as const }),
       setGuestDisplayName: async () => ({ ok: true as const }),
     }
-    ;(globalThis as unknown as { dshDesktop: typeof api }).dshDesktop = api
+    installDesktop(api)
     expect(readDesktopAccountApi()).toBe(api)
   })
 })
@@ -32,35 +37,27 @@ describe('readDesktopGuestDisplayName', () => {
   })
 
   it('returns a trimmed name from preload', async () => {
-    ;(globalThis as unknown as {
-      dshDesktop: { getGuestDisplayName: () => Promise<string | undefined> }
-    }).dshDesktop = {
+    installDesktop({
       getGuestDisplayName: async () => '  阿木  ',
-    }
+    })
     await expect(readDesktopGuestDisplayName()).resolves.toBe('阿木')
   })
 
   it('returns undefined for a blank or non-string value', async () => {
-    ;(globalThis as unknown as {
-      dshDesktop: { getGuestDisplayName: () => Promise<unknown> }
-    }).dshDesktop = {
+    installDesktop({
       getGuestDisplayName: async () => '   ',
-    }
+    })
     await expect(readDesktopGuestDisplayName()).resolves.toBeUndefined()
-    ;(globalThis as unknown as {
-      dshDesktop: { getGuestDisplayName: () => Promise<unknown> }
-    }).dshDesktop = {
+    ;(globalThis as { dshDesktop?: { getGuestDisplayName: () => Promise<unknown> } }).dshDesktop = {
       getGuestDisplayName: async () => 12,
     }
     await expect(readDesktopGuestDisplayName()).resolves.toBeUndefined()
   })
 
   it('returns undefined when preload throws', async () => {
-    ;(globalThis as unknown as {
-      dshDesktop: { getGuestDisplayName: () => Promise<string> }
-    }).dshDesktop = {
+    installDesktop({
       getGuestDisplayName: async () => { throw new Error('invoke failed') },
-    }
+    })
     await expect(readDesktopGuestDisplayName()).resolves.toBeUndefined()
   })
 })

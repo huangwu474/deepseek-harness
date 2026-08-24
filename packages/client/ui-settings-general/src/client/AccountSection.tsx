@@ -54,36 +54,52 @@ export function AccountSection({ t, close }: AccountSectionProps) {
     if (desktop?.setGuestDisplayName === undefined) return
     setBusy(true)
     setError(undefined)
-    const result = await desktop.setGuestDisplayName(draft)
-    setBusy(false)
-    if (!result.ok) {
-      setError(result.error ?? t('account.saveError'))
-      return
+    try {
+      const result = await desktop.setGuestDisplayName(draft)
+      if (!result.ok) {
+        setError(result.error ?? t('account.saveError'))
+        return
+      }
+      const next = draft.trim() === '' ? undefined : draft.trim()
+      setName(next)
+      setEditing(false)
+      notifyGuestDisplayNameChanged()
+    } catch {
+      // Preload invoke or guest-file write rejected.
+      setError(t('account.saveError'))
+    } finally {
+      setBusy(false)
     }
-    const next = draft.trim() === '' ? undefined : draft.trim()
-    setName(next)
-    setEditing(false)
-    notifyGuestDisplayNameChanged()
   }
 
   const logout = (): void => {
+    const run = desktop?.logout
     close()
-    void desktop?.logout?.()
+    if (run === undefined) return
+    void run().catch(() => {
+      // Preload invoke rejected after the panel closed.
+    })
   }
 
   const clearProfile = async (): Promise<void> => {
     if (desktop?.clearGuestProfile === undefined) return
     setBusy(true)
-    const result = await desktop.clearGuestProfile()
-    setBusy(false)
-    if (!result.ok) {
-      setError(result.error ?? t('account.clearError'))
-      return
+    try {
+      const result = await desktop.clearGuestProfile()
+      if (!result.ok) {
+        setError(result.error ?? t('account.clearError'))
+        return
+      }
+      setConfirming(false)
+      setName(undefined)
+      setEditing(false)
+      notifyGuestDisplayNameChanged()
+    } catch {
+      // Preload invoke or guest-file write rejected.
+      setError(t('account.clearError'))
+    } finally {
+      setBusy(false)
     }
-    setConfirming(false)
-    setName(undefined)
-    setEditing(false)
-    notifyGuestDisplayNameChanged()
   }
 
   return (

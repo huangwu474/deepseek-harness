@@ -8,6 +8,7 @@ import { AccountSection } from '../src/client/AccountSection.tsx'
 import { CloseLabel, HeaderContent, TriggerContent } from '../src/client/chrome.tsx'
 import {
   GUEST_DISPLAY_NAME_CHANGED,
+  type DesktopAccountApi,
 } from '../src/client/desktop-account.ts'
 import type { TriggerContentProps } from '../src/client/chrome.tsx'
 import { SettingsDocumentAction } from '../src/client/SettingsDocumentAction.tsx'
@@ -57,8 +58,8 @@ describe('AccountSection', () => {
     Reflect.deleteProperty(globalThis, 'dshDesktop')
   })
 
-  function installDesktop(api: Record<string, unknown>): void {
-    ;(globalThis as unknown as { dshDesktop: typeof api }).dshDesktop = api
+  function installDesktop(api: DesktopAccountApi): void {
+    ;(globalThis as { dshDesktop?: DesktopAccountApi }).dshDesktop = api
   }
 
   it('shows the guest fallback without a desktop API', () => {
@@ -132,7 +133,8 @@ describe('AccountSection', () => {
     })
     render(<AccountSection {...kit} close={vi.fn()} t={t} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
-    expect((screen.getByRole('textbox') as HTMLInputElement).value).toBe('')
+    const draft = screen.getByRole('textbox') as HTMLInputElement
+    expect(draft.value).toBe('')
   })
 
   it('reports a save failure and keeps the editor open', async () => {
@@ -149,6 +151,25 @@ describe('AccountSection', () => {
     expect(screen.getByRole('textbox')).toBeTruthy()
   })
 
+  it('recovers from a thrown save so the editor stays usable', async () => {
+    const setGuestDisplayName = vi.fn()
+      .mockRejectedValueOnce(new Error('ipc failed'))
+      .mockResolvedValueOnce({ ok: true })
+    installDesktop({ setGuestDisplayName })
+    render(<AccountSection {...kit} close={vi.fn()} t={t} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '青砚' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect((await screen.findByRole('alert')).textContent).toBe('Could not save the display name')
+    const draft = screen.getByRole('textbox') as HTMLInputElement
+    const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement
+    expect(draft.disabled).toBe(false)
+    expect(save.disabled).toBe(false)
+    fireEvent.click(save)
+    await waitFor(() => { expect(setGuestDisplayName).toHaveBeenCalledTimes(2) })
+    expect(await screen.findByText('青砚')).toBeTruthy()
+  })
+
   it('logs out through preload after closing settings', async () => {
     const logout = vi.fn(async () => ({ ok: true as const }))
     const close = vi.fn()
@@ -159,6 +180,16 @@ describe('AccountSection', () => {
     expect(logout).toHaveBeenCalledOnce()
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Clear profile' })).toBeNull()
+  })
+
+  it('swallows a rejected logout after closing settings', async () => {
+    const logout = vi.fn(async () => { throw new Error('ipc failed') })
+    const close = vi.fn()
+    installDesktop({ logout })
+    render(<AccountSection {...kit} close={close} t={t} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Log out' }))
+    await waitFor(() => { expect(logout).toHaveBeenCalledOnce() })
+    expect(close).toHaveBeenCalledOnce()
   })
 
   it('clears the guest profile only after confirmation', async () => {
@@ -208,6 +239,28 @@ describe('AccountSection', () => {
     expect(screen.getByText('青砚')).toBeTruthy()
   })
 
+  it('recovers from a thrown clear so confirmation stays usable', async () => {
+    const clearGuestProfile = vi.fn()
+      .mockRejectedValueOnce(new Error('ipc failed'))
+      .mockResolvedValueOnce({ ok: true })
+    installDesktop({
+      getGuestDisplayName: async () => '青砚',
+      clearGuestProfile,
+    })
+    render(<AccountSection {...kit} close={vi.fn()} t={t} />)
+    expect(await screen.findByText('青砚')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear profile' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect((await screen.findByRole('alert')).textContent).toBe('Could not clear the guest profile')
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(screen.getByText('青砚')).toBeTruthy()
+    const confirm = screen.getByRole('button', { name: 'Clear' }) as HTMLButtonElement
+    expect(confirm.disabled).toBe(false)
+    fireEvent.click(confirm)
+    await waitFor(() => { expect(clearGuestProfile).toHaveBeenCalledTimes(2) })
+    expect(await screen.findByText('Guest')).toBeTruthy()
+  })
+
   it('ignores a late display-name read after unmount', async () => {
     let resolveName!: (value: string) => void
     installDesktop({
@@ -250,8 +303,10 @@ describe('AccountSection', () => {
     render(<AccountSection {...kit} close={vi.fn()} t={t} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect((screen.getByRole('textbox') as HTMLInputElement).disabled).toBe(true)
-    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
+    const draft = screen.getByRole('textbox') as HTMLInputElement
+    const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement
+    expect(draft.disabled).toBe(true)
+    expect(save.disabled).toBe(true)
     resolveSave({ ok: true })
     await waitFor(() => { expect(screen.queryByRole('textbox')).toBeNull() })
   })
