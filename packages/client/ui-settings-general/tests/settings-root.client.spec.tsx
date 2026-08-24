@@ -4,12 +4,17 @@ import { useEffect, useState } from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { SettingsRootComponentProps } from '../src/client/shell-contract.ts'
 import { SettingsRoot } from '../src/client/SettingsRoot.tsx'
+import type { DesktopAccountApi } from '../src/client/desktop-account.ts'
 import { en } from '../src/client/locales.ts'
 
 afterEach(() => {
   cleanup()
   Reflect.deleteProperty(globalThis, 'dshDesktop')
 })
+
+function installDesktop(api: DesktopAccountApi): void {
+  ;(globalThis as { dshDesktop?: DesktopAccountApi }).dshDesktop = api
+}
 
 type Row = { id: string; order: number; label: string }
 type Step = { id: string; order: number }
@@ -172,10 +177,7 @@ describe('SettingsRoot account trigger', () => {
   it('calls desktop logout and update check when preload APIs exist', async () => {
     const logout = vi.fn(async () => ({ ok: true }))
     const checkUpdates = vi.fn(async () => ({ ok: true }))
-    ;(globalThis as unknown as { dshDesktop: { logout: typeof logout; checkUpdates: typeof checkUpdates } }).dshDesktop = {
-      logout,
-      checkUpdates,
-    }
+    installDesktop({ logout, checkUpdates })
     mount()
     openMenu()
     expect(screen.getByRole('menuitem', { name: 'Check for updates' })).toBeTruthy()
@@ -193,12 +195,10 @@ describe('SettingsRoot account trigger', () => {
   })
 
   it('omits logout and updates when only one desktop session method exists', () => {
-    ;(globalThis as unknown as {
-      dshDesktop: { logout: () => Promise<{ ok: true }>; setGuestDisplayName: () => Promise<{ ok: true }> }
-    }).dshDesktop = {
+    installDesktop({
       logout: async () => ({ ok: true }),
       setGuestDisplayName: async () => ({ ok: true }),
-    }
+    })
     mount()
     openMenu()
     expect(screen.queryByRole('menuitem', { name: 'Check for updates' })).toBeNull()
@@ -210,12 +210,10 @@ describe('SettingsRoot account trigger', () => {
       .mockResolvedValueOnce({ ok: true, message: 'already current' })
       .mockResolvedValueOnce({ ok: false, error: 'offline' })
       .mockResolvedValueOnce({ ok: false })
-    ;(globalThis as unknown as {
-      dshDesktop: { logout: () => Promise<{ ok: true }>; checkUpdates: typeof checkUpdates }
-    }).dshDesktop = {
+    installDesktop({
       logout: async () => ({ ok: true }),
       checkUpdates,
-    }
+    })
     mount()
     openMenu()
     fireEvent.click(screen.getByRole('menuitem', { name: 'Check for updates' }))
@@ -228,6 +226,30 @@ describe('SettingsRoot account trigger', () => {
     openMenu()
     fireEvent.click(screen.getByRole('menuitem', { name: 'Check for updates' }))
     expect(await screen.findByText(/source preview/i)).toBeTruthy()
+  })
+
+  it('shows the localized update copy when checkUpdates rejects', async () => {
+    installDesktop({
+      logout: async () => ({ ok: true }),
+      checkUpdates: async () => { throw new Error('ipc failed') },
+    })
+    mount()
+    openMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Check for updates' }))
+    expect(await screen.findByRole('dialog', { name: 'Check for updates' })).toBeTruthy()
+    expect(screen.getByText(/source preview/i)).toBeTruthy()
+  })
+
+  it('swallows a rejected logout from the account menu', async () => {
+    const logout = vi.fn(async () => { throw new Error('ipc failed') })
+    installDesktop({
+      logout,
+      checkUpdates: async () => ({ ok: true }),
+    })
+    mount()
+    openMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Log out' }))
+    await vi.waitFor(() => { expect(logout).toHaveBeenCalledOnce() })
   })
 
   it('writes dark and system appearance ids', () => {

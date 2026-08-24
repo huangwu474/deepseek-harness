@@ -73,7 +73,8 @@ export function readDesktopAccountApi(): DesktopAccountApi | undefined {
  * @returns True only when logout and checkUpdates are both functions.
  */
 export function hasDesktopSessionMenu(api: DesktopAccountApi | undefined): boolean {
-  return typeof api?.logout === 'function' && typeof api?.checkUpdates === 'function'
+  if (api === undefined) return false
+  return typeof api.logout === 'function' && typeof api.checkUpdates === 'function'
 }
 
 /**

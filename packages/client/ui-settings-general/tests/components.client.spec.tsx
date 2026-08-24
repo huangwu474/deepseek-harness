@@ -32,6 +32,10 @@ const t: TriggerContentProps['t'] = key => (en as Record<string, string>)[key] ?
 const unusedHook = (() => { throw new Error('unused by settings-general components') }) as never
 const kit = { useSessions: unusedHook, useWorkspaces: unusedHook }
 
+function installDesktop(api: DesktopAccountApi): void {
+  ;(globalThis as { dshDesktop?: DesktopAccountApi }).dshDesktop = api
+}
+
 describe('chrome content', () => {
   afterEach(() => {
     Reflect.deleteProperty(globalThis, 'dshDesktop')
@@ -50,22 +54,18 @@ describe('chrome content', () => {
   })
 
   it('TriggerContent prefers a desktop guest display name when present', async () => {
-    ;(globalThis as unknown as {
-      dshDesktop: { getGuestDisplayName: () => Promise<string | undefined> }
-    }).dshDesktop = {
+    installDesktop({
       getGuestDisplayName: async () => '阿木',
-    }
+    })
     render(<TriggerContent {...kit} wide t={t} />)
     expect(await screen.findByText('阿木')).toBeTruthy()
   })
 
   it('TriggerContent ignores a late display-name read after unmount', async () => {
     let resolveName!: (value: string) => void
-    ;(globalThis as unknown as {
-      dshDesktop: { getGuestDisplayName: () => Promise<string> }
-    }).dshDesktop = {
+    installDesktop({
       getGuestDisplayName: () => new Promise<string>((resolve) => { resolveName = resolve }),
-    }
+    })
     const view = render(<TriggerContent {...kit} wide t={t} />)
     view.unmount()
     resolveName('late')
@@ -75,11 +75,9 @@ describe('chrome content', () => {
 
   it('TriggerContent rereads the guest name after a same-document write', async () => {
     let stored: string | undefined = '阿木'
-    ;(globalThis as unknown as {
-      dshDesktop: { getGuestDisplayName: () => Promise<string | undefined> }
-    }).dshDesktop = {
+    installDesktop({
       getGuestDisplayName: async () => stored,
-    }
+    })
     render(<TriggerContent {...kit} wide t={t} />)
     expect(await screen.findByText('阿木')).toBeTruthy()
     stored = '青砚'
@@ -99,10 +97,6 @@ describe('AccountSection', () => {
   afterEach(() => {
     Reflect.deleteProperty(globalThis, 'dshDesktop')
   })
-
-  function installDesktop(api: DesktopAccountApi): void {
-    ;(globalThis as { dshDesktop?: DesktopAccountApi }).dshDesktop = api
-  }
 
   it('shows the guest fallback without a desktop API', () => {
     render(<AccountSection {...kit} close={vi.fn()} t={t} />)

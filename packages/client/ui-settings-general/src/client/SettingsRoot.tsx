@@ -213,23 +213,32 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
                 setPanelOpen(true)
                 return
               case 'appearance-light':
+                setTheme?.('light')
+                return
               case 'appearance-dark':
+                setTheme?.('dark')
+                return
               case 'appearance-system':
-                setTheme?.(id.slice('appearance-'.length) as AccountThemePreference)
+                setTheme?.('system')
                 return
               case 'help':
                 setNotice({ title: t('account.help'), body: t('account.helpBody') })
                 return
               case 'updates':
-                void desktop?.checkUpdates?.().then((result) => {
+                void Promise.resolve(desktop?.checkUpdates?.()).then((result) => {
+                  if (result === undefined) return
                   const body = result.ok
                     ? (result.message ?? t('account.updatesNone'))
                     : (result.error ?? t('account.updatesNone'))
                   setNotice({ title: t('account.updates'), body })
+                }).catch(() => {
+                  setNotice({ title: t('account.updates'), body: t('account.updatesNone') })
                 })
                 return
               case 'logout':
-                void desktop?.logout?.()
+                void Promise.resolve(desktop?.logout?.()).catch(() => {
+                  // Preload invoke rejected; the account menu already closed.
+                })
             }
           }}
           anchor={(
